@@ -1,0 +1,48 @@
+name: Build Marlin Firmware
+
+on:
+  push:
+    branches:
+      - master
+    paths:
+      - 'Configuration/**.h'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      BOARD: "STM32F070CB_malyan"
+      USE_TAG: "2.0.9.3"  # match with checkout of 'Configurations' submodule
+
+    steps:
+      - name: Check out repo
+        uses: actions/checkout@v2
+        with:
+          submodules: 'recursive'
+
+      - name: Generate configuration from example
+        run: |
+          mkdir -p ${{ github.workspace }}/M200_v2 ${{ github.workspace }}/Builds
+          cp ${{ github.workspace }}/Configurations/config/examples/Malyan/M200/* ${{ github.workspace }}/M200_v2
+          sed -i 's/BOARD_MALYAN_M200/BOARD_MALYAN_M200_V2/1' ${{ github.workspace }}/M200_v2/Configuration.h
+
+      - name: Compile firmware
+        run: |
+          docker run \
+            -u root:root \
+            -e BOARD \
+            -e UPDATE_FORCE=true \
+            -e USE_TAG \
+            -v ${{ github.workspace }}/Builds:/home/platformio/build \
+            -v ${{ github.workspace }}/M200_v2:/home/platformio/CustomConfiguration \
+            frealmyr/marlin-build:latest
+
+      - run: |
+          sudo cp ${{ github.workspace }}/Builds/STM32F070CB_malyan/firmware.bin ${{ github.workspace }}/Builds/STM32F070CB_malyan/update.bin
+          sudo cp ${{ github.workspace }}/Builds/STM32F070CB_malyan/firmware.bin ${{ github.workspace }}/Builds/STM32F070CB_malyan/fcupdate.flg
+
+      - uses: actions/upload-artifact@v2
+        with:
+          name: Firmware
+          path: ${{ github.workspace }}/Builds/STM32F070CB_malyan/
